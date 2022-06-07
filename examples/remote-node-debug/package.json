@@ -1,0 +1,22 @@
+{
+  "name": "remote-node-debug",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node remote-node-debug.js",
+    "proxy": "ts-node ../../ws-proxy-cli.ts --port 9221 --target \"$(cat .wsurl)\"",
+    "proxy-client": "ts-node ../../ws-proxy-cli.ts --port 9221 --relay 9222 --echo",
+    "proxy-relay": "ts-node ../../ws-proxy-cli.ts --forward ws://localhost:9222 --target \"$(cat .wsurl)\"",
+    "info": "echo \"ws=$(cat .wsurl)\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@iyio/ws-proxy": "^0.0.1"
+  },
+  "devDependencies": {
+    "ts-node": "^10.8.1"
+  }
+}
