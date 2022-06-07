@@ -1,5 +1,5 @@
 import WebSocket, { WebSocketServer } from 'ws';
-import { MessageListener, PortService, WebSocketServerPortService, WsProxyCtx, WsProxyOptions } from "./types";
+import { MessageListener, PortService, SocketClosed, WebSocketServerPortService, WsProxyCtx, WsProxyOptions } from "./types";
 
 export async function wsProxyAsync({
     port,
@@ -14,10 +14,15 @@ export async function wsProxyAsync({
     return new Promise((_resolve,_reject)=>{
 
         const services:PortService[]=[];
+        let disposing=false;
 
         const ctx:WsProxyCtx={
             services,
             dispose:()=>{
+                if(disposing){
+                    return;
+                }
+                disposing=true;
                 console.info('Disposing ws-proxy server');
                 const dl=[...services];
                 for(const d of dl){
@@ -25,6 +30,7 @@ export async function wsProxyAsync({
                 }
                 _resolve();
             },
+            isDisposed:()=>disposing,
             sendClientMessage:(ws,data,isBinary)=>{
                 for(const c of services){
                     c.onClientMessage?.(ws,data,isBinary);
@@ -105,6 +111,9 @@ export function createWsServer(port:number, name:string, ctx:WsProxyCtx, onMessa
         ws.on('message',(data,isBinary)=>{
             onMessage?.(ws,data,isBinary);
         });
+        ws.on('close',()=>{
+            onMessage?.(ws,SocketClosed,false);
+        })
     })
 
     wss.on('listening',()=>{
@@ -121,7 +130,11 @@ export function createPort(port:number,ctx:WsProxyCtx):PortService
 
     ps.onTargetMessage=(ws,data,isBinary)=>{
         for(const c of ps.wss.clients){
-            c.send(data,{binary:isBinary});
+            if(data===SocketClosed){
+                c.close();
+            }else{
+                c.send(data,{binary:isBinary});
+            }
         }
     }
 
@@ -134,61 +147,151 @@ export function createRelay(relayPort:number,ctx:WsProxyCtx):PortService
 
     ps.onClientMessage=(ws,data,isBinary)=>{
         for(const c of ps.wss.clients){
-            c.send(data,{binary:isBinary});
+            if(data===SocketClosed){
+                c.close();
+            }else{
+                c.send(data,{binary:isBinary});
+            }
         }
     }
 
     return ps;
 }
 
-export function createForward(forward:string,ctx:WsProxyCtx):PortService
+export function createForward(forward:string,ctx:WsProxyCtx):PortService|null
 {
-    const ws=new WebSocket(forward);
-    const ps:PortService={
-        onTargetMessage(_ws,data,isBinary)
-        {
-            ws.send(data,{binary:isBinary});
-        },
-        dispose()
-        {
-            aryRemove(ps,ctx.services);
-            try{
-                ws.close();
-            }catch{}
+    let retried=false;
+    function retry()
+    {
+        if(retried){
+            return;
+        }
+        retried=true;
+        ctx.sendClientMessage(null,SocketClosed,false);
+        if(!ctx.isDisposed()){
+            delayAsync(500).then(()=>{
+                if(!ctx.isDisposed()){
+                    createForward(forward,ctx);
+                }
+            })
         }
     }
-    ctx.services.push(ps);
+    try{
+        const ws=new WebSocket(forward);
+        const ps:PortService={
+            onTargetMessage(_ws,data,isBinary)
+            {
+                if(data===SocketClosed){
+                    ws.close();
+                    retry();
+                }else{
+                    ws.send(data,{binary:isBinary});
+                }
+            },
+            dispose()
+            {
+                aryRemove(ps,ctx.services);
+                try{
+                    ws.close();
+                }catch{}
+            }
+        }
+        ctx.services.push(ps);
 
-    ws.on('message',(data,isBinary)=>{
-        ctx.sendClientMessage(ws,data,isBinary);
-    })
-    
-    return ps;
+        ws.on('open',()=>{
+            console.info(`forward connected - ${forward}`);
+        })
+
+        ws.on('close',()=>{
+            console.log('forward closed');
+            ps.dispose?.();
+            retry();
+        })
+
+        ws.on('error',()=>{
+            console.log('forward error');
+            ps.dispose?.();
+            retry();
+        })
+
+        ws.on('message',(data,isBinary)=>{
+            ctx.sendClientMessage(ws,data,isBinary);
+        })
+        
+        return ps;
+    }catch(ex){
+        console.error('Create web socket client failed',ex);
+        retry();
+        return null;
+    }
 }
 
-export function createTarget(target:string,ctx:WsProxyCtx):PortService
+export function createTarget(target:string,ctx:WsProxyCtx):PortService|null
 {
-    const ws=new WebSocket(target);
-    const ps:PortService={
-        onClientMessage(_ws,data,isBinary)
-        {
-            ws.send(data,{binary:isBinary});
-        },
-        dispose()
-        {
-            aryRemove(ps,ctx.services);
-            try{
-                ws.close();
-            }catch{}
+    let retried=false;
+    function retry()
+    {
+        if(retried){
+            return;
+        }
+        retried=true;
+        ctx.sendTargetMessage(null,SocketClosed,false);
+        if(!ctx.isDisposed()){
+            delayAsync(500).then(()=>{
+                if(!ctx.isDisposed()){
+                    createTarget(target,ctx);
+                }
+            })
         }
     }
-    ctx.services.push(ps);
+    try{
+        const ws=new WebSocket(target);
+        const ps:PortService={
+            onClientMessage(_ws,data,isBinary)
+            {
+                if(data===SocketClosed){
+                    ws.close();
+                    retry();
+                }else{
+                    ws.send(data,{binary:isBinary});
+                }
+            },
+            dispose()
+            {
+                aryRemove(ps,ctx.services);
+                try{
+                    ws.close();
+                }catch{}
+            }
+        }
+        ctx.services.push(ps);
 
-    ws.on('message',(data,isBinary)=>{
-        ctx.sendTargetMessage(ws,data,isBinary);
-    })
-    
-    return ps;
+        ws.on('open',()=>{
+            console.info(`target connected - ${target}`);
+        })
+
+        ws.on('close',()=>{
+            console.log('target closed');
+            ps.dispose?.();
+            retry();
+        })
+
+        ws.on('error',()=>{
+            console.log('target error');
+            ps.dispose?.();
+            retry();
+        })
+
+        ws.on('message',(data,isBinary)=>{
+            ctx.sendTargetMessage(ws,data,isBinary);
+        })
+        
+        return ps;
+    }catch(ex){
+        console.error('Create web socket client failed',ex);
+        retry();
+    }
+    return null;
 }
 
 export function createEcho(ctx:WsProxyCtx):PortService
@@ -199,7 +302,7 @@ export function createEcho(ctx:WsProxyCtx):PortService
             console.info('echo',{type:'client',data:isBinary?data:data.toString()})
         },
         onTargetMessage:(ws,data,isBinary)=>{
-            console.info('echo',{type:'target',data:isBinary?data:data.toString()})
+            console.info('echo',{type:'target',data:isBinary?data:data?.toString()})
         },
         dispose(){
             aryRemove(ps,ctx.services);

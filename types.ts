@@ -47,6 +47,7 @@ export interface WsProxyCtx
 {
     services:PortService[];
     dispose():void;
+    isDisposed:()=>boolean;
     sendClientMessage:MessageListener;
     sendTargetMessage:MessageListener;
 }
@@ -63,4 +64,6 @@ export interface WebSocketServerPortService extends PortService
     wss:WebSocketServer;
 }
 
-export type MessageListener=(ws:WebSocket|null,data:WebSocket.Data,isBinary:boolean)=>void;
+export const SocketClosed=Symbol();
+
+export type MessageListener=(ws:WebSocket|null,data:WebSocket.Data|symbol,isBinary:boolean)=>void;
