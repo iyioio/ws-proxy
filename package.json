@@ -19,7 +19,7 @@
     "url": "https://github.com/iyioio/ws-proxy.git"
   },
   "bin": {
-    "ws-proxy": "dist/ws-proxy.js"
+    "ws-proxy": "dist/ws-proxy-cli.js"
   },
   "keywords": [],
   "author": "Scott Vance",
