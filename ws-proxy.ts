@@ -149,7 +149,7 @@ export function createRelay(relayPort:number,ctx:WsProxyCtx):PortService
     ps.onClientMessage=(ws,data,isBinary)=>{
         for(const c of ps.wss.clients){
             if(data===SocketClosed){
-                c.close();
+                closeRelayClient(c);
             }else{
                 c.send(data,{binary:isBinary});
             }
@@ -183,7 +183,7 @@ export function createForward(forward:string,ctx:WsProxyCtx):PortService|null
             onTargetMessage(_ws,data,isBinary)
             {
                 if(data===SocketClosed){
-                    ws.close();
+                    closeRelayClient(ws);
                     retry();
                 }else{
                     ws.send(data,{binary:isBinary});
@@ -423,4 +423,11 @@ function aryRemove<T>(item:T, ary:T[]):boolean
     }else{
         return false;
     }
+}
+
+function closeRelayClient(client:WebSocket)
+{
+    client.send(SocketClosed,{binary:false},()=>{
+        client.close();
+    })
 }

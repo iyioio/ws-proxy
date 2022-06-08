@@ -66,6 +66,6 @@ export interface WebSocketServerPortService extends PortService
     wss:WebSocketServer;
 }
 
-export const SocketClosed=Symbol();
+export const SocketClosed='{{{{S_O_C_K_E_T_CLOSED}}}}';
 
-export type MessageListener=(ws:WebSocket|null,data:WebSocket.Data|symbol,isBinary:boolean)=>void;
+export type MessageListener=(ws:WebSocket|null,data:WebSocket.Data,isBinary:boolean)=>void;
