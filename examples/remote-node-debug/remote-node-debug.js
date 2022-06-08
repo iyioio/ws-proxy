@@ -5,12 +5,17 @@ async function main()
 {
     try{
 
-        let _continue=true;
         let i=0;
 
         startDebugger();
 
-        while(_continue){
+        console.info('Waiting for debugger to attach')
+
+        inspector.waitForDebugger();
+
+        console.info('Debugger attached. now continuing')
+
+        while(i<5){
 
             process.stdout.write(`${i++} `);
 

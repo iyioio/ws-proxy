@@ -15,7 +15,9 @@ export interface WsProxyOptions
     relay?:number;
 
     /**
-     * This is the full address to the target socket
+     * This is the full address to the target websocket. If target starts with the file:// protocol
+     * the contents of the file will be read just before the target connection is created and used
+     * is as the address of the target, and can be updated through of the lifecycle of the proxy.
      * @alias t
      */
     target?:string;

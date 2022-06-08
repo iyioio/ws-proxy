@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import WebSocket, { WebSocketServer } from 'ws';
 import { MessageListener, PortService, SocketClosed, WebSocketServerPortService, WsProxyCtx, WsProxyOptions } from "./types";
 
@@ -245,46 +246,80 @@ export function createTarget(target:string,ctx:WsProxyCtx):PortService|null
         }
     }
     try{
-        const ws=new WebSocket(target);
+        let disposed=false;
+        let ready=false;
+        const queue:{data:any,isBinary:boolean}[]=[];
+        let ws:WebSocket|null=null;
+        function createSocket()
+        {
+            if(disposed){
+                return;
+            }
+            let url=target;
+            if(target.startsWith('file://')){
+                url=fs.readFileSync(target.substring('file://'.length)).toString();
+                console.log(`target look up: ${target} -> ${url}`)
+            }
+            ws=new WebSocket(url);
+            ws.on('open',()=>{
+                ready=true;
+                console.info(`target connected - ${target}`);
+                for(const q of queue){
+                    ws?.send(q.data,{binary:q.isBinary});
+                }
+            })
+
+            ws.on('close',()=>{
+                console.log('target closed');
+                ps.dispose?.();
+                retry();
+            })
+
+            ws.on('error',(err)=>{
+                console.log(`target error ${target}`,err);
+                ps.dispose?.();
+                retry();
+            })
+
+            ws.on('message',(data,isBinary)=>{
+                ctx.sendTargetMessage(ws,data,isBinary);
+            })
+        }
         const ps:PortService={
             onClientMessage(_ws,data,isBinary)
             {
-                if(data===SocketClosed){
-                    ws.close();
-                    retry();
+                if(ws && ready){
+                    if(data===SocketClosed){
+                        ps.dispose?.();
+                        ws.close();
+                        retry();
+                    }else{
+                        ws.send(data,{binary:isBinary});
+                    }
                 }else{
-                    ws.send(data,{binary:isBinary});
+                    if(data===SocketClosed){
+                        ps.dispose?.();
+                        retry();
+                    }else{
+                        queue.push({data,isBinary});
+                        if(!ws){
+                            createSocket();
+                        }
+                    }
                 }
             },
             dispose()
             {
+                disposed=true;
                 aryRemove(ps,ctx.services);
                 try{
-                    ws.close();
+                    ws?.close();
                 }catch{}
             }
         }
         ctx.services.push(ps);
 
-        ws.on('open',()=>{
-            console.info(`target connected - ${target}`);
-        })
-
-        ws.on('close',()=>{
-            console.log('target closed');
-            ps.dispose?.();
-            retry();
-        })
-
-        ws.on('error',()=>{
-            console.log('target error');
-            ps.dispose?.();
-            retry();
-        })
-
-        ws.on('message',(data,isBinary)=>{
-            ctx.sendTargetMessage(ws,data,isBinary);
-        })
+        
         
         return ps;
     }catch(ex){

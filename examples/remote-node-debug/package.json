@@ -5,9 +5,9 @@
   "main": "index.js",
   "scripts": {
     "start": "node remote-node-debug.js",
-    "proxy": "ts-node ../../ws-proxy-cli.ts --port 9221 --target \"$(cat .wsurl)\"",
+    "proxy": "ts-node ../../ws-proxy-cli.ts --port 9221 --target file://.wsurl",
     "proxy-client": "ts-node ../../ws-proxy-cli.ts --port 9221 --relay 9222 --echo",
-    "proxy-relay": "ts-node ../../ws-proxy-cli.ts --forward ws://localhost:9222 --target \"$(cat .wsurl)\"",
+    "proxy-relay": "ts-node ../../ws-proxy-cli.ts --forward ws://localhost:9222 --target file://.wsurl",
     "info": "echo \"ws=$(cat .wsurl)\""
   },
   "keywords": [],
